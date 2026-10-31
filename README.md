@@ -219,3 +219,7 @@ Issues and pull requests are welcome on [this repository](https://github.com/AI-
 Licensed under the [Apache License 2.0](LICENSE). Based on [googleanalytics/google-analytics-mcp](https://github.com/googleanalytics/google-analytics-mcp) by Google.
 
 - The server sends your Google Analytics data to the agent or LLM you connect it to.
+
+---
+
+Try out [AI Shopping Feeds](https://aishoppingfeeds.com/), our shopping feed management tool (including Google Shopping feeds).
