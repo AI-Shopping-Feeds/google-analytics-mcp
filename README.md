@@ -1,30 +1,24 @@
 # Google Analytics MCP Server (GA4, read + write)
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![GitHub stars](https://img.shields.io/github/stars/AI-Shopping-Feeds/google-analytics-mcp?style=social)](https://github.com/AI-Shopping-Feeds/google-analytics-mcp/stargazers)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/) [![Fork of googleanalytics/google-analytics-mcp](https://img.shields.io/badge/fork%20of-googleanalytics%2Fgoogle--analytics--mcp-lightgrey.svg)](https://github.com/googleanalytics/google-analytics-mcp)
 
-This repo contains the source code for running a local
-[MCP](https://modelcontextprotocol.io) server that interacts with APIs for
-[Google Analytics 4](https://support.google.com/analytics).
+An [MCP](https://modelcontextprotocol.io) server for
+[Google Analytics 4](https://support.google.com/analytics), using the
+[Data API](https://developers.google.com/analytics/devguides/reporting/data/v1),
+[Admin API](https://developers.google.com/analytics/devguides/config/admin/v1) and
+[Measurement Protocol](https://developers.google.com/analytics/devguides/collection/protocol/ga4).
+Use it from Claude, ChatGPT, Cursor, Codex, Gemini or any MCP client to run reports,
+audit and change property configuration, and send server-side events.
 
-This is a fork of [googleanalytics/google-analytics-mcp](https://github.com/googleanalytics/google-analytics-mcp),
-maintained by [AI Shopping Feeds](https://github.com/AI-Shopping-Feeds).
-Upstream covers reports and a few account lookups. This fork adds:
+This is a fork of [googleanalytics/google-analytics-mcp](https://github.com/googleanalytics/google-analytics-mcp), maintained by [AI Shopping Feeds](https://github.com/AI-Shopping-Feeds). Upstream covers reports, a few account lookups and annotations. This fork adds:
 
-- **Reports:** pivot reports, a field compatibility checker, a searchable list
-  of every dimension and metric, and quota usage.
-- **Property configuration:** data streams, key events, audiences, change
-  history, data retention, attribution and Google signals settings, and data
-  access reports.
-- **Write tools** (with `--allow-write`): custom dimensions and metrics, key
-  events, data retention, Google Ads links and Measurement Protocol secrets.
-- **The Measurement Protocol:** validate events, and send them from a server,
-  for example offline purchases and refunds.
-- **Every other method:** the Data and Admin APIs have about 240 methods across
-  v1beta and v1alpha, and `list_api_methods` and `call_api` reach all of them.
+- **reports**: pivot reports, a field compatibility checker, a searchable list of every dimension and metric, and quota usage
+- **property configuration**: data streams, key events, audiences, change history, data retention, attribution and Google signals, and data access reports
+- **write tools** (with `--allow-write`): custom dimensions and metrics, key events, data retention, Google Ads links and Measurement Protocol secrets
+- the **Measurement Protocol**: validate events, then send them from a server, for example offline purchases
+- **every other Data and Admin API method** (about 240) through `call_api`
 
-> **Using an AI agent?** See [Let your agent set it up](#let-your-agent-set-it-up).
+Part of the AI Shopping Feeds MCP family: [Google Ads](https://github.com/AI-Shopping-Feeds/google-ads-mcp) · [Google Merchant Centre](https://github.com/AI-Shopping-Feeds/google-merchant-centre-mcp) · **Google Analytics** · [YouTube Studio](https://github.com/AI-Shopping-Feeds/youtube-studio-mcp).
 
 ## Let your agent set it up
 
@@ -34,12 +28,10 @@ Paste this into Claude Code, Codex, Cursor or any agent that can read web pages 
 Set up the Google Analytics MCP server for me by following https://raw.githubusercontent.com/AI-Shopping-Feeds/google-analytics-mcp/main/skills/google-analytics-mcp/SKILL.md
 ```
 
-The agent:
-- checks whether it's already connected
-- installs the runner if you agree
-- walks you through Google credentials
-- adds the server to your client's config without touching your other servers
-- checks it works by calling `get_account_summaries`
+The agent checks whether it's already connected, installs the runner if you
+agree, walks you through Google sign-in, adds the server to your
+client's config without touching your other servers, and checks it works by
+calling `get_account_summaries`.
 
 The same file is an [Agent Skill](https://agentskills.io), so your agent can keep it as a guide to using the tools well. For Claude Code, copy the folder into your skills:
 
@@ -50,275 +42,170 @@ cp -r /tmp/google-analytics-mcp/skills/google-analytics-mcp ~/.claude/skills/
 
 Other agents that support skills load the same `skills/google-analytics-mcp` folder from their own skills directory.
 
-## Tools 🛠️
+## What it can do
 
-The server uses the
-[Google Analytics Data API](https://developers.google.com/analytics/devguides/reporting/data/v1),
-the [Admin API](https://developers.google.com/analytics/devguides/config/admin/v1)
-and the [Measurement Protocol](https://developers.google.com/analytics/devguides/collection/protocol/ga4).
+32 tools: 21 read tools, plus 11 write tools when the server runs with `--allow-write`.
 
-### Reports 📙
+### Read
 
-| Tool | What it does |
+| Area | Tools |
 |---|---|
-| `run_report` | Runs a core report. |
-| `run_realtime_report` | Runs a realtime report (last 30 minutes). |
-| `run_funnel_report` | Runs a funnel report (Data API v1alpha). |
-| `run_conversions_report` | Runs a report scoped to specific key events. |
-| `run_pivot_report` | Runs a pivot (cross-tab) report. |
-| `check_compatibility` | Checks which dimensions and metrics can be combined. |
-| `get_dimensions_and_metrics` | Lists every standard and custom dimension and metric, with search. |
-| `get_custom_dimensions_and_metrics` | Lists the property's custom dimensions and metrics. |
-| `get_property_quotas_snapshot` | Shows Data API quota used today and this hour. |
+| Reports | `run_report`, `run_realtime_report`, `run_funnel_report`, `run_conversions_report`, `run_pivot_report` |
+| Fields | `get_dimensions_and_metrics` (searchable, standard and custom), `get_custom_dimensions_and_metrics`, `check_compatibility` |
+| Properties | `get_account_summaries`, `get_property_details`, `get_property_settings`, `list_data_streams`, `list_key_events`, `list_audiences`, `list_google_ads_links`, `list_property_annotations` |
+| Auditing | `search_change_history`, `run_access_report`, `get_property_quotas_snapshot` |
+| Measurement Protocol | `validate_measurement_protocol_events` (checks events without recording them) |
+| API | `list_api_methods`: every Data and Admin API method, with request fields |
 
-### Account and property configuration 🟠
+### Write
 
-| Tool | What it does |
+Only listed when the server starts with `--allow-write`.
+
+| Area | Tools |
 |---|---|
-| `get_account_summaries` | Lists the accounts and properties the user can access. |
-| `get_property_details` | Returns a property's details. |
-| `get_property_settings` | Returns data retention, attribution and Google signals settings. |
-| `list_data_streams` | Lists web and app data streams, with measurement IDs. |
-| `list_key_events` | Lists key events (formerly conversions). |
-| `list_audiences` | Lists audiences and their rules. |
-| `list_google_ads_links` | Lists linked Google Ads accounts. |
-| `list_property_annotations` | Lists annotations. |
-| `search_change_history` | Shows who changed what in the account, and when. |
-| `run_access_report` | Shows who read the property's data (admins only). |
-| `list_api_methods` | Lists every Data and Admin API method, and a method's request fields. |
-| `validate_measurement_protocol_events` | Checks Measurement Protocol events without recording them. |
+| Custom definitions | `create_custom_dimension`, `create_custom_metric`, `archive_custom_definition` |
+| Key events | `create_key_event`, `delete_key_event` |
+| Settings and links | `update_data_retention`, `create_google_ads_link`, `create_property_annotation` |
+| Measurement Protocol | `create_measurement_protocol_secret`, `send_measurement_protocol_events` |
+| Any method | `call_api`: audiences, BigQuery links, channel groups, enhanced measurement and the rest |
 
-### Write tools ✏️ (need `--allow-write`)
+### Safety
 
-| Tool | What it does |
-|---|---|
-| `create_property_annotation` | Adds an annotation to reports. |
-| `create_custom_dimension` | Registers an event, user or item parameter as a custom dimension. |
-| `create_custom_metric` | Registers a numeric event parameter as a custom metric. |
-| `archive_custom_definition` | Archives a custom dimension or metric. |
-| `create_key_event` | Marks an event as a key event. |
-| `delete_key_event` | Stops treating an event as a key event. |
-| `update_data_retention` | Changes how long event-level data is kept. |
-| `create_google_ads_link` | Links a Google Ads account. |
-| `create_measurement_protocol_secret` | Creates an API secret for the Measurement Protocol. |
-| `send_measurement_protocol_events` | Validates, then sends events to GA4. |
-| `call_api` | Calls any Data or Admin API method, such as `create_audience` or `create_big_query_link`. |
+- Write tools are off unless the server starts with `--allow-write`. They also need the `analytics.edit` scope and the Editor (or Marketer) role.
+- Tools carry MCP annotations; archiving, deleting, sending events and `call_api` are marked destructive so clients can ask first.
+- `send_measurement_protocol_events` validates events with Google first and sends nothing if there are problems. Sent events can't be deleted.
+- Set the Measurement Protocol secret in `GA_MEASUREMENT_PROTOCOL_API_SECRET` instead of passing it to the tool.
 
-### Write safety
+## Supported clients
 
-- **Off by default:** write tools are only listed when the server starts
-  with `--allow-write`. They also need the `analytics.edit` scope and at least
-  the Editor (or Marketer) role on the property.
-- **Annotated:** write tools carry MCP annotations
-  (`readOnlyHint: false`). `archive_custom_definition`, `delete_key_event`,
-  `send_measurement_protocol_events` and `call_api` are also marked
-  `destructiveHint: true`, so clients that confirm destructive tools will ask
-  first.
-- **Measurement Protocol events:** `send_measurement_protocol_events`
-  validates events against Google's debug endpoint and sends nothing if
-  there are problems. Sent events can't be deleted. Set the API secret in
-  `GA_MEASUREMENT_PROTOCOL_API_SECRET` instead of passing it to the tool.
+| Client | Works? | How |
+|---|---|---|
+| Claude Code | ✅ | Local server, `claude mcp add` (below) |
+| Claude Desktop | ✅ | Local server, `claude_desktop_config.json` |
+| Cursor | ✅ | Local server, `~/.cursor/mcp.json` |
+| VS Code (Copilot) | ✅ | Local server, `.vscode/mcp.json` (uses `servers` instead of `mcpServers`) |
+| Codex | ✅ | Local server, `~/.codex/config.toml` |
+| Gemini CLI | ✅ | Local server, `~/.gemini/settings.json` |
+| Windsurf and other local clients | ✅ | Local server, same JSON entry |
+| Claude.ai and ChatGPT | ❌ not yet | These need a remote server with sign-in. This server only runs locally (stdio). Use a local client. |
 
-## Setup instructions 🔧
+## Setup
 
-✨ Watch the [Google Analytics MCP Setup
-Tutorial](https://youtu.be/nS8HLdwmVlY) on YouTube for a step-by-step
-walkthrough of these instructions.
+### 1. Install uv
 
-[![Watch the video](https://img.youtube.com/vi/nS8HLdwmVlY/mqdefault.jpg)](https://www.youtube.com/watch?v=nS8HLdwmVlY)
-
-Setup involves the following steps:
-
-1.  Configure Python.
-1.  Configure credentials for Google Analytics.
-1.  Configure your MCP client.
-
-### Configure Python 🐍
-
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) (or
-[pipx](https://pipx.pypa.io/stable/#install-pipx)). The server runs straight from
-this repository. The `analytics-mcp` package on PyPI is the upstream release
-without this fork's tools.
+The server runs with `uvx` from [uv](https://docs.astral.sh/uv/getting-started/installation/)
+(`brew install uv` on macOS) and needs Python 3.10 or later. It installs straight
+from this repository:
 
 ```shell
 uvx --from git+https://github.com/AI-Shopping-Feeds/google-analytics-mcp.git analytics-mcp
 ```
 
-Pin a release by adding `@vX.Y.Z` to the URL.
+Add `--allow-write` after `analytics-mcp` to enable write tools (here and in the client configs below). The `analytics-mcp` package on PyPI is Google's upstream release without this fork's tools, so install from this repository. Pin a release by adding `@vX.Y.Z` to the URL.
 
-### Enable APIs in your project ✅
+### 2. Get credentials
 
-[Follow the instructions](https://support.google.com/googleapi/answer/6158841)
-to enable the following APIs in your Google Cloud project:
+1. **Google Cloud project:** enable the
+   [Admin API](https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com) and
+   [Data API](https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com),
+   and create an OAuth client (Desktop app).
+2. **Sign in** with Application Default Credentials, as a Google user with access to
+   your properties. Leave out `analytics.edit` if you only want read tools.
 
-- [Google Analytics Admin API](https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com)
-- [Google Analytics Data API](https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com)
+   ```shell
+   gcloud auth application-default login \
+     --scopes https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/analytics.edit,https://www.googleapis.com/auth/cloud-platform \
+     --client-id-file=PATH_TO_OAUTH_CLIENT_JSON
+   ```
 
-### Configure credentials 🔑
+   The credentials file path it prints is `GOOGLE_APPLICATION_CREDENTIALS`.
 
-Configure your [Application Default Credentials
-(ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc).
-Make sure the credentials are for a user with access to your Google Analytics
-accounts or properties.
+Service account impersonation and more: [docs/credentials.md](docs/credentials.md).
 
-Credentials must include the Google Analytics read-only scope:
+### 3. Add it to your client
 
-```
-https://www.googleapis.com/auth/analytics.readonly
-```
+Replace the placeholders. Keep your other servers in each file.
 
-If you plan to enable write tools (such as `create_custom_dimension`) using
-the `--allow-write` flag, your credentials must also include the edit scope:
+**Claude Code**
 
-```
-https://www.googleapis.com/auth/analytics.edit
-```
-
-Check out
-[Manage OAuth Clients](https://support.google.com/cloud/answer/15549257)
-for how to create an OAuth client.
-
-Here are some sample `gcloud` commands you might find useful:
-
-- Set up ADC using user credentials and an OAuth desktop or web client after
-  downloading the client JSON to `YOUR_CLIENT_JSON_FILE`.
-
-  ```shell
-  gcloud auth application-default login \
-    --scopes https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform \
-    --client-id-file=YOUR_CLIENT_JSON_FILE
-  ```
-
-- Set up ADC using service account impersonation.
-
-  ```shell
-  gcloud auth application-default login \
-    --impersonate-service-account=SERVICE_ACCOUNT_EMAIL \
-    --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform
-  ```
-
-When the `gcloud auth application-default` command completes, copy the
-`PATH_TO_CREDENTIALS_JSON` file location printed to the console in the
-following message. You'll need this for the next step!
-
-```
-Credentials saved to file: [PATH_TO_CREDENTIALS_JSON]
+```bash
+claude mcp add --scope user google-analytics \
+  --env GOOGLE_APPLICATION_CREDENTIALS=/abs/path/credentials.json \
+  --env GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID \
+  -- uvx --from git+https://github.com/AI-Shopping-Feeds/google-analytics-mcp.git analytics-mcp
 ```
 
-### Configure Gemini
+**Claude Desktop, Cursor, Gemini CLI, Windsurf** (and VS Code under `servers`)
 
-1.  Install [Gemini
-    CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/get-started/installation.md)
-    or [Gemini Code
-    Assist](https://marketplace.visualstudio.com/items?itemName=Google.geminicodeassist).
-
-1.  Create or edit the file at `~/.gemini/settings.json`, adding your server
-    to the `mcpServers` list.
-
-    Replace `PATH_TO_CREDENTIALS_JSON` with the path you copied in the previous
-    step.
-
-    We also recommend that you add a `GOOGLE_CLOUD_PROJECT` attribute to the
-    `env` object. Replace `YOUR_PROJECT_ID` in the following example with the
-    [project ID](https://support.google.com/googleapi/answer/7014113) of your
-    Google Cloud project.
-
-    ```json
-    {
-      "mcpServers": {
-        "analytics-mcp": {
-          "command": "uvx",
-          "args": ["--from", "git+https://github.com/AI-Shopping-Feeds/google-analytics-mcp.git", "analytics-mcp"],
-          "env": {
-            "GOOGLE_APPLICATION_CREDENTIALS": "PATH_TO_CREDENTIALS_JSON",
-            "GOOGLE_CLOUD_PROJECT": "YOUR_PROJECT_ID"
-          }
-        }
+```json
+{
+  "mcpServers": {
+    "google-analytics": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/AI-Shopping-Feeds/google-analytics-mcp.git", "analytics-mcp"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/abs/path/credentials.json",
+        "GOOGLE_CLOUD_PROJECT": "YOUR_PROJECT_ID"
       }
     }
-    ```
+  }
+}
+```
 
-    To enable write tools, append `"--allow-write"` to `"args"`.
+Desktop apps often can't find `uvx` on the PATH; if the server doesn't start, use
+the full path from `which uvx` as the `command`.
 
-### Configure Claude Code
+**Codex** (`~/.codex/config.toml`)
 
-1.  Add the MCP server with the following command:
+```toml
+[mcp_servers.google-analytics]
+command = "uvx"
+args = ["--from", "git+https://github.com/AI-Shopping-Feeds/google-analytics-mcp.git", "analytics-mcp"]
+env = { GOOGLE_APPLICATION_CREDENTIALS = "/abs/path/credentials.json", GOOGLE_CLOUD_PROJECT = "YOUR_PROJECT_ID" }
+```
 
-    Replace `PATH_TO_CREDENTIALS_JSON` with the path you copied in the previous
-    step, and replace `YOUR_PROJECT_ID` with the
-    [project ID](https://support.google.com/googleapi/answer/7014113) of your
-    Google Cloud project.
+### 4. Check it works
 
-    ```shell
-    claude mcp add analytics-mcp \
-      --scope user \
-      -e "GOOGLE_APPLICATION_CREDENTIALS=PATH_TO_CREDENTIALS_JSON" \
-      -e "GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID" \
-      -- uvx --from git+https://github.com/AI-Shopping-Feeds/google-analytics-mcp.git analytics-mcp
-    ```
+Restart or reload the client, then ask it to "list my Google Analytics accounts and properties". It should
+call `get_account_summaries`.
 
-    Add `--allow-write` at the end to enable write tools.
+## Configuration
 
-### Other MCP clients (Claude Desktop, Cursor, Codex, VS Code)
+| Variable | Required | What it does |
+|---|---|---|
+| `GOOGLE_APPLICATION_CREDENTIALS` | yes* | Path to Application Default Credentials (*or a gcloud default login) |
+| `GOOGLE_CLOUD_PROJECT` | recommended | Google Cloud project with the Admin and Data APIs enabled |
+| `GA_MEASUREMENT_PROTOCOL_API_SECRET` | no | Measurement Protocol API secret, used when a tool call doesn't pass one |
+| `--allow-write` (flag) | no | Enables write tools; needs the `analytics.edit` scope |
 
-Use the command `uvx` with the arguments
-`--from git+https://github.com/AI-Shopping-Feeds/google-analytics-mcp.git analytics-mcp` (plus `--allow-write` for write tools) and the
-same `GOOGLE_APPLICATION_CREDENTIALS` and `GOOGLE_CLOUD_PROJECT` environment
-variables, in `claude_desktop_config.json`, `~/.cursor/mcp.json`,
-`~/.codex/config.toml` or `.vscode/mcp.json`. The
-[agent skill](skills/google-analytics-mcp/SKILL.md) has a ready-made snippet
-for each one.
+## Example prompts
 
-## Try it out 🥼
+```text
+What were my top 10 products by revenue in the last 28 days, and how did that compare with the previous 28?
+```
 
-Launch your MCP client (for example Claude Code, Gemini CLI or Gemini Code Assist) and type `/mcp`. You should see
-`analytics-mcp` listed in the results.
+```text
+Break down sessions by channel and device as a pivot table.
+```
 
-Here are some sample prompts to get you started:
+```text
+Audit my property: data streams, key events, custom dimensions, data retention, and what changed in the last 30 days.
+```
 
-- Ask what the server can do:
+```text
+Validate, then send a purchase event for order T1001 worth £49.99 to my web stream.
+```
 
-  ```
-  what can the analytics-mcp server do?
-  ```
+## More docs
 
-- Ask about a Google Analytics property
+- [Credentials](docs/credentials.md): enabling the APIs, OAuth clients and service account impersonation
+- [Agent skill](skills/google-analytics-mcp/SKILL.md): setup and usage guide for agents
 
-  ```
-  Give me details about my Google Analytics property with 'xyz' in the name
-  ```
+## Contributing and licence
 
-- Prompt for analysis:
+Issues and pull requests are welcome on [this repository](https://github.com/AI-Shopping-Feeds/google-analytics-mcp). See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
-  ```
-  what are the most popular events in my Google Analytics property in the last 180 days?
-  ```
+Licensed under the [Apache License 2.0](LICENSE). Based on [googleanalytics/google-analytics-mcp](https://github.com/googleanalytics/google-analytics-mcp) by Google.
 
-- Ask about signed-in users:
-
-  ```
-  were most of my users in the last 6 months logged in?
-  ```
-
-- Ask about property configuration:
-
-  ```
-  what are the custom dimensions and custom metrics in my property?
-  ```
-
-- Audit tracking setup:
-
-  ```
-  which data streams and key events does my property have, and what changed in the last 30 days?
-  ```
-
-- Send an offline purchase (with `--allow-write`):
-
-  ```
-  validate, then send a purchase event for order T1001 worth £49.99 to my web stream
-  ```
-
-## Contributing ✨
-
-Contributions welcome! Open an issue or pull request on
-[this repository](https://github.com/AI-Shopping-Feeds/google-analytics-mcp). See the [Contributing Guide](CONTRIBUTING.md).
+- The server sends your Google Analytics data to the agent or LLM you connect it to.
