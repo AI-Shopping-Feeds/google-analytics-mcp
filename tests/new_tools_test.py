@@ -19,6 +19,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from analytics_mcp import coordinator
+from mcp import types as mcp_types
 from analytics_mcp.tools import generic, measurement_protocol as mp
 from analytics_mcp.tools.admin import config, manage
 from analytics_mcp.tools.reporting import extra
@@ -347,13 +348,22 @@ class TestGenericTools(unittest.IsolatedAsyncioTestCase):
         )
 
 
-class TestToolRegistration(unittest.TestCase):
+class TestToolRegistration(unittest.IsolatedAsyncioTestCase):
 
-    def test_tool_counts_and_annotations(self):
-        read = {t.name: t for t in coordinator._READ_ONLY_MCP_TOOLS}
-        write = {t.name: t for t in coordinator._WRITE_MCP_TOOLS}
+    async def _tools(self, allow_write):
+        server = coordinator.create_server(allow_write=allow_write)
+        result = await server.get_request_handler("tools/list").handler(
+            None, None
+        )
+        return {t.name: t for t in result.tools}
+
+    async def test_tool_counts_and_annotations(self):
+        read = await self._tools(False)
+        everything = await self._tools(True)
+        write = {n: t for n, t in everything.items() if n not in read}
         self.assertEqual(len(read), 21)
         self.assertEqual(len(write), 11)
+        self.assertEqual(set(write), coordinator._WRITE_TOOL_NAMES)
         self.assertFalse(set(read) & set(write))
         self.assertTrue(
             read[
@@ -362,6 +372,38 @@ class TestToolRegistration(unittest.TestCase):
         )
         self.assertTrue(write["call_api"].annotations.destructive_hint)
         self.assertFalse(write["create_key_event"].annotations.destructive_hint)
+
+    async def test_expected_errors_reach_the_client(self):
+        server = coordinator.create_server(allow_write=False)
+        call = server.get_request_handler("tools/call").handler
+        params = mcp_types.CallToolRequestParams(
+            name="get_property_details", arguments={"property_id": "nope"}
+        )
+        result = await call(None, params)
+        self.assertTrue(result.is_error)
+        self.assertIn("Invalid property ID", result.content[0].text)
+
+    @patch("analytics_mcp.tools.client.google.auth.default")
+    async def test_missing_credentials_message_reaches_the_client(
+        self, mock_default
+    ):
+        import google.auth.exceptions
+
+        mock_default.side_effect = (
+            google.auth.exceptions.DefaultCredentialsError(
+                "Your default credentials were not found."
+            )
+        )
+        server = coordinator.create_server(allow_write=False)
+        call = server.get_request_handler("tools/call").handler
+        params = mcp_types.CallToolRequestParams(
+            name="get_account_summaries", arguments={}
+        )
+        result = await call(None, params)
+        self.assertTrue(result.is_error)
+        self.assertIn(
+            "default credentials were not found", result.content[0].text
+        )
 
 
 if __name__ == "__main__":
