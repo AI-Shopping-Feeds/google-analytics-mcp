@@ -23,7 +23,7 @@ from analytics_mcp.tools.admin import info
 from google.analytics import admin_v1alpha
 from google.api_core import exceptions as google_exceptions
 from google.type import date_pb2
-from mcp import types as mcp_types
+from mcp import Client
 
 
 class TestCreatePropertyAnnotation(unittest.IsolatedAsyncioTestCase):
@@ -188,62 +188,43 @@ class TestCreatePropertyAnnotation(unittest.IsolatedAsyncioTestCase):
             )
         )
 
+        arguments = {
+            "property_id": 12345,
+            "title": "GTM Release",
+            "start_date": "2026-10-21",
+        }
+
         # In read-only mode, calling create_property_annotation should fail
         ro_server = coordinator.create_server(allow_write=False)
-        ro_call_handler = ro_server.get_request_handler("tools/call").handler
-        ro_call_res = await ro_call_handler(
-            None,
-            mcp_types.CallToolRequestParams(
-                name="create_property_annotation",
-                arguments={
-                    "property_id": 12345,
-                    "title": "GTM Release",
-                    "start_date": "2026-10-21",
-                },
-            ),
-        )
+        async with Client(ro_server) as ro_client:
+            ro_call_res = await ro_client.call_tool(
+                "create_property_annotation", arguments
+            )
         self.assertTrue(ro_call_res.is_error)
         self.assertIn("--allow-write", ro_call_res.content[0].text)
 
-        # Enable write mode and verify list_tools and call_mcp_tool
+        # Enable write mode and verify list_tools and call_tool
         rw_server = coordinator.create_server(allow_write=True)
-        rw_list_handler = rw_server.get_request_handler("tools/list").handler
-        rw_call_handler = rw_server.get_request_handler("tools/call").handler
-        list_res = await rw_list_handler(None, None)
-        tool_names = [t.name for t in list_res.tools]
-        self.assertIn("create_property_annotation", tool_names)
+        async with Client(rw_server) as rw_client:
+            list_res = await rw_client.list_tools()
+            tool_names = [t.name for t in list_res.tools]
+            self.assertIn("create_property_annotation", tool_names)
 
-        rw_call_res = await rw_call_handler(
-            None,
-            mcp_types.CallToolRequestParams(
-                name="create_property_annotation",
-                arguments={
-                    "property_id": 12345,
-                    "title": "GTM Release",
-                    "start_date": "2026-10-21",
-                },
-            ),
-        )
-        self.assertFalse(rw_call_res.is_error)
-        self.assertIn("GTM Release", rw_call_res.content[0].text)
-
-        # Verify 403 PermissionDenied on a write tool includes actionable scope hint
-        mock_client.create_reporting_data_annotation.side_effect = (
-            google_exceptions.PermissionDenied(
-                "Request had insufficient authentication scopes."
+            rw_call_res = await rw_client.call_tool(
+                "create_property_annotation", arguments
             )
-        )
-        err_call_res = await rw_call_handler(
-            None,
-            mcp_types.CallToolRequestParams(
-                name="create_property_annotation",
-                arguments={
-                    "property_id": 12345,
-                    "title": "GTM Release",
-                    "start_date": "2026-10-21",
-                },
-            ),
-        )
+            self.assertFalse(rw_call_res.is_error)
+            self.assertIn("GTM Release", rw_call_res.content[0].text)
+
+            # A 403 on a write tool includes an actionable scope hint
+            mock_client.create_reporting_data_annotation.side_effect = (
+                google_exceptions.PermissionDenied(
+                    "Request had insufficient authentication scopes."
+                )
+            )
+            err_call_res = await rw_client.call_tool(
+                "create_property_annotation", arguments
+            )
         self.assertTrue(err_call_res.is_error)
         self.assertIn("analytics.edit", err_call_res.content[0].text)
         self.assertIn(
@@ -268,32 +249,25 @@ class TestAllowWriteConfiguration(unittest.IsolatedAsyncioTestCase):
 
     async def test_create_server_toggles_write_tools(self):
         """Tests that write tools are only registered when allow_write=True."""
-        ro_server = coordinator.create_server(allow_write=False)
-        ro_list = await ro_server.get_request_handler("tools/list").handler(
-            None, None
-        )
-        mcp_names_ro = [t.name for t in ro_list.tools]
+        ro_list = await coordinator.create_server(
+            allow_write=False
+        ).list_tools()
+        mcp_names_ro = [t.name for t in ro_list]
         self.assertNotIn("create_property_annotation", mcp_names_ro)
 
-        rw_server = coordinator.create_server(allow_write=True)
-        rw_list = await rw_server.get_request_handler("tools/list").handler(
-            None, None
-        )
-        mcp_names_rw = [t.name for t in rw_list.tools]
+        rw_list = await coordinator.create_server(allow_write=True).list_tools()
+        mcp_names_rw = [t.name for t in rw_list]
         self.assertIn("create_property_annotation", mcp_names_rw)
 
     async def test_mcp_tool_annotations(self):
         """Tests that MCP tools carry appropriate ToolAnnotations."""
-        rw_server = coordinator.create_server(allow_write=True)
-        rw_list = await rw_server.get_request_handler("tools/list").handler(
-            None, None
-        )
+        rw_list = await coordinator.create_server(allow_write=True).list_tools()
         self.assertEqual(
-            len({id(t.annotations) for t in rw_list.tools}),
-            len(rw_list.tools),
+            len({id(t.annotations) for t in rw_list}),
+            len(rw_list),
             "Each tool should have its own ToolAnnotations instance",
         )
-        for mcp_tool in rw_list.tools:
+        for mcp_tool in rw_list:
             self.assertIsNotNone(mcp_tool.annotations)
             dumped = mcp_tool.annotations.model_dump(
                 by_alias=True, exclude_none=True
@@ -305,7 +279,8 @@ class TestAllowWriteConfiguration(unittest.IsolatedAsyncioTestCase):
                         "readOnlyHint": False,
                         "destructiveHint": mcp_tool.name
                         in coordinator._DESTRUCTIVE_TOOL_NAMES,
-                        "idempotentHint": False,
+                        "idempotentHint": mcp_tool.name
+                        in coordinator._IDEMPOTENT_TOOL_NAMES,
                         "openWorldHint": True,
                     },
                 )

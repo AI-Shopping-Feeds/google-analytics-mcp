@@ -72,7 +72,7 @@ Only listed when the server starts with `--allow-write`.
 ### Safety
 
 - Write tools are off unless the server starts with `--allow-write`. They also need the `analytics.edit` scope and the Editor (or Marketer) role.
-- Tools carry MCP annotations; archiving, deleting, sending events and `call_api` are marked destructive so clients can ask first.
+- Tools carry MCP titles and annotations; archiving, deleting, shortening data retention, sending events and `call_api` are marked destructive so clients can ask first.
 - `send_measurement_protocol_events` validates events with Google first and sends nothing if there are problems. Sent events can't be deleted.
 - Set the Measurement Protocol secret in `GA_MEASUREMENT_PROTOCOL_API_SECRET` instead of passing it to the tool.
 
@@ -177,6 +177,16 @@ call `get_account_summaries`.
 | `GOOGLE_CLOUD_PROJECT` | recommended | Google Cloud project with the Admin and Data APIs enabled |
 | `GA_MEASUREMENT_PROTOCOL_API_SECRET` | no | Measurement Protocol API secret, used when a tool call doesn't pass one |
 | `--allow-write` (flag) | no | Enables write tools; needs the `analytics.edit` scope |
+| `--tools` (flag) or `GOOGLE_ANALYTICS_MCP_TOOL_GROUPS` | no | Comma-separated tool groups to register, e.g. `--tools reports,properties`. The flag wins over the variable. Default: all groups |
+
+Tool groups keep the tool list short when you only need part of it. `get_account_summaries` is always registered, and write tools still need `--allow-write`. An unknown group stops the server at startup.
+
+| Group | Read tools | Write tools (`--allow-write`) |
+|---|---|---|
+| `reports` | `run_report`, `run_realtime_report`, `run_funnel_report`, `run_conversions_report`, `run_pivot_report`, `check_compatibility`, `get_dimensions_and_metrics`, `get_custom_dimensions_and_metrics`, `get_property_quotas_snapshot` | none |
+| `properties` | `get_property_details`, `get_property_settings`, `list_data_streams`, `list_key_events`, `list_audiences`, `list_google_ads_links`, `list_property_annotations`, `search_change_history`, `run_access_report` | `create_property_annotation`, `create_custom_dimension`, `create_custom_metric`, `archive_custom_definition`, `create_key_event`, `delete_key_event`, `update_data_retention`, `create_google_ads_link` |
+| `measurement_protocol` | `validate_measurement_protocol_events` | `create_measurement_protocol_secret`, `send_measurement_protocol_events` |
+| `api` | `list_api_methods` | `call_api` |
 
 ## Example prompts
 

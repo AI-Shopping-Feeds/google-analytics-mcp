@@ -15,7 +15,10 @@ The Google Analytics MCP server gives you GA4 data and configuration:
 - **Measurement Protocol:** send server-side events.
 - **Everything else:** `call_api` runs any Data or Admin API method.
 
-Write tools only exist when the server runs with `--allow-write`.
+Write tools only exist when the server runs with `--allow-write`. The tool
+list can also be limited to groups (`reports`, `properties`,
+`measurement_protocol`, `api`) with `--tools` or
+`GOOGLE_ANALYTICS_MCP_TOOL_GROUPS`.
 
 This file has two parts: **Set up** connects the server to the person's agent,
 and **Work with the tools** explains how to use it well.
@@ -126,6 +129,14 @@ env = { GOOGLE_APPLICATION_CREDENTIALS = "PATH_TO_CREDENTIALS_JSON", GOOGLE_CLOU
 
 **Any other client** that runs local servers: the command `uvx` with the
 arguments above and the same environment variables.
+
+**Fewer tools (optional):** if the person only needs part of the server, add
+`--tools` with a comma-separated list of groups after `analytics-mcp`, e.g.
+`--tools reports,properties`, or set `GOOGLE_ANALYTICS_MCP_TOOL_GROUPS` in
+`env` instead. Groups: `reports` (report and field tools), `properties`
+(property reads and config writes), `measurement_protocol` and `api`
+(`list_api_methods`, `call_api`). `get_account_summaries` is always there. An
+unknown group stops the server at startup with the list of valid groups.
 
 ### 5. Check it works
 
@@ -260,6 +271,9 @@ then import GA4 key events and audiences.
     lacks the Editor/Marketer role. Re-run the `gcloud auth
     application-default login` command with both scopes.
 - **Write tools missing:** the server isn't running with `--allow-write`.
+- **A tool is missing or says its tool group isn't enabled:** the server was
+  started with `--tools` or `GOOGLE_ANALYTICS_MCP_TOOL_GROUPS` that leaves out
+  its group. Add the group, or remove the setting for all tools.
 - **`API has not been used in project` / `SERVICE_DISABLED`:** enable the
   Google Analytics Admin API and Data API in the Cloud project, and set
   `GOOGLE_CLOUD_PROJECT` to that project.
