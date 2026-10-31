@@ -15,19 +15,19 @@
 """Builds the Google Analytics MCP server.
 
 Tools are registered on the MCP SDK's MCPServer, which derives each tool's
-input schema from the function signature. create_server returns its low-level
-Server, which server.py runs over stdio.
+input schema from the function signature. create_server returns the
+MCPServer, which server.py runs over stdio.
 """
 
 import functools
+import importlib.metadata
 import inspect
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 import google.auth.exceptions
 import httpx
 from google.api_core import exceptions as google_exceptions
 from mcp import types as mcp_types
-from mcp.server.lowlevel import Server
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
@@ -88,56 +88,184 @@ from analytics_mcp.tools.reporting.conversions import (
     _run_conversions_report_description,
 )
 
-# (function, description override). None uses the function's docstring.
-_READ_ONLY_TOOLS: list[tuple[Callable[..., Any], str | None]] = [
-    (get_account_summaries, None),
-    (list_google_ads_links, None),
-    (get_property_details, None),
-    (list_property_annotations, None),
-    (get_custom_dimensions_and_metrics, None),
-    (run_report, _run_report_description()),
-    (run_realtime_report, _run_realtime_report_description()),
-    (run_funnel_report, _run_funnel_report_description()),
-    (run_conversions_report, _run_conversions_report_description()),
-    (run_pivot_report, None),
-    (check_compatibility, None),
-    (get_dimensions_and_metrics, None),
-    (get_property_quotas_snapshot, None),
-    (list_data_streams, None),
-    (list_key_events, None),
-    (list_audiences, None),
-    (search_change_history, None),
-    (get_property_settings, None),
-    (run_access_report, None),
-    (list_api_methods, None),
-    (validate_measurement_protocol_events, None),
+SERVER_NAME = "Google Analytics MCP Server"
+
+
+def _package_version() -> str:
+    try:
+        return importlib.metadata.version("analytics-mcp")
+    except importlib.metadata.PackageNotFoundError:
+        return "0.0.0+unknown"
+
+
+SERVER_VERSION = _package_version()
+
+SERVER_INSTRUCTIONS = """\
+Google Analytics 4: Data API reports, Admin API configuration and Measurement Protocol events.
+Start with get_account_summaries to find account and property IDs.
+Before a report, look up field names with get_dimensions_and_metrics; don't guess them.
+Write tools need --allow-write and the analytics.edit OAuth scope.
+send_measurement_protocol_events can't be undone: run validate_measurement_protocol_events first.
+For anything without a dedicated tool, use call_api (a write tool); list_api_methods shows what it can call.
+Limit tools to groups with --tools or GOOGLE_ANALYTICS_MCP_TOOL_GROUPS: reports, properties, measurement_protocol, api."""
+
+# Tool groups that --tools / GOOGLE_ANALYTICS_MCP_TOOL_GROUPS can select.
+TOOL_GROUPS = ("reports", "properties", "measurement_protocol", "api")
+
+# Every tool: (function, title, group, description override). A group of None
+# means the tool is always registered. A description of None uses the
+# function's docstring.
+_READ_ONLY_TOOLS: list[
+    tuple[Callable[..., Any], str, str | None, str | None]
+] = [
+    (get_account_summaries, "Get account summaries", None, None),
+    (list_google_ads_links, "List Google Ads links", "properties", None),
+    (get_property_details, "Get property details", "properties", None),
+    (
+        list_property_annotations,
+        "List property annotations",
+        "properties",
+        None,
+    ),
+    (
+        get_custom_dimensions_and_metrics,
+        "Get custom dimensions and metrics",
+        "reports",
+        None,
+    ),
+    (run_report, "Run a report", "reports", _run_report_description()),
+    (
+        run_realtime_report,
+        "Run a realtime report",
+        "reports",
+        _run_realtime_report_description(),
+    ),
+    (
+        run_funnel_report,
+        "Run a funnel report",
+        "reports",
+        _run_funnel_report_description(),
+    ),
+    (
+        run_conversions_report,
+        "Run a conversions report",
+        "reports",
+        _run_conversions_report_description(),
+    ),
+    (run_pivot_report, "Run a pivot report", "reports", None),
+    (
+        check_compatibility,
+        "Check dimension and metric compatibility",
+        "reports",
+        None,
+    ),
+    (
+        get_dimensions_and_metrics,
+        "Get dimensions and metrics",
+        "reports",
+        None,
+    ),
+    (
+        get_property_quotas_snapshot,
+        "Get property quotas snapshot",
+        "reports",
+        None,
+    ),
+    (list_data_streams, "List data streams", "properties", None),
+    (list_key_events, "List key events", "properties", None),
+    (list_audiences, "List audiences", "properties", None),
+    (search_change_history, "Search change history", "properties", None),
+    (get_property_settings, "Get property settings", "properties", None),
+    (run_access_report, "Run a data access report", "properties", None),
+    (list_api_methods, "List API methods", "api", None),
+    (
+        validate_measurement_protocol_events,
+        "Validate Measurement Protocol events",
+        "measurement_protocol",
+        None,
+    ),
 ]
 
 # Only registered when the server runs with --allow-write.
-_WRITE_TOOLS: list[tuple[Callable[..., Any], str | None]] = [
-    (create_property_annotation, None),
-    (create_custom_dimension, None),
-    (create_custom_metric, None),
-    (archive_custom_definition, None),
-    (create_key_event, None),
-    (delete_key_event, None),
-    (update_data_retention, None),
-    (create_google_ads_link, None),
-    (create_measurement_protocol_secret, None),
-    (send_measurement_protocol_events, None),
-    (call_api, None),
+_WRITE_TOOLS: list[tuple[Callable[..., Any], str, str | None, str | None]] = [
+    (
+        create_property_annotation,
+        "Create a property annotation",
+        "properties",
+        None,
+    ),
+    (create_custom_dimension, "Create a custom dimension", "properties", None),
+    (create_custom_metric, "Create a custom metric", "properties", None),
+    (
+        archive_custom_definition,
+        "Archive a custom dimension or metric",
+        "properties",
+        None,
+    ),
+    (create_key_event, "Create a key event", "properties", None),
+    (delete_key_event, "Delete a key event", "properties", None),
+    (update_data_retention, "Update data retention", "properties", None),
+    (create_google_ads_link, "Create a Google Ads link", "properties", None),
+    (
+        create_measurement_protocol_secret,
+        "Create a Measurement Protocol secret",
+        "measurement_protocol",
+        None,
+    ),
+    (
+        send_measurement_protocol_events,
+        "Send Measurement Protocol events",
+        "measurement_protocol",
+        None,
+    ),
+    (call_api, "Call any Analytics API method", "api", None),
 ]
 
 # Write tools whose effects can't be undone, marked destructive for MCP hosts.
+# Shortening data retention deletes event data older than the new period.
 _DESTRUCTIVE_TOOL_NAMES = {
     "archive_custom_definition",
     "delete_key_event",
+    "update_data_retention",
     "send_measurement_protocol_events",
     "call_api",
 }
 
-_READ_ONLY_TOOL_NAMES = {fn.__name__ for fn, _ in _READ_ONLY_TOOLS}
-_WRITE_TOOL_NAMES = {fn.__name__ for fn, _ in _WRITE_TOOLS}
+# Write tools that have no further effect when repeated with the same
+# arguments.
+_IDEMPOTENT_TOOL_NAMES = {
+    "archive_custom_definition",
+    "delete_key_event",
+    "update_data_retention",
+}
+
+_READ_ONLY_TOOL_NAMES = {t[0].__name__ for t in _READ_ONLY_TOOLS}
+_WRITE_TOOL_NAMES = {t[0].__name__ for t in _WRITE_TOOLS}
+_TOOL_GROUP_OF = {t[0].__name__: t[2] for t in _READ_ONLY_TOOLS + _WRITE_TOOLS}
+
+
+def parse_tool_groups(value: str | Iterable[str] | None) -> frozenset[str]:
+    """Parses a comma-separated list of tool groups.
+
+    An empty or missing value selects every group.
+
+    Raises:
+        ValueError: If a group isn't one of TOOL_GROUPS.
+    """
+    if value is None:
+        return frozenset(TOOL_GROUPS)
+    items = value.split(",") if isinstance(value, str) else value
+    groups = {item.strip().lower() for item in items if item.strip()}
+    if not groups:
+        return frozenset(TOOL_GROUPS)
+    unknown = sorted(groups - set(TOOL_GROUPS))
+    if unknown:
+        raise ValueError(
+            f"Unknown tool group(s): {', '.join(unknown)}."
+            f" Valid groups: {', '.join(TOOL_GROUPS)}."
+        )
+    return frozenset(groups)
+
 
 _WRITE_PERMISSION_DENIED_HINT = (
     " Hint: Write tools require the"
@@ -212,17 +340,22 @@ def _annotations(name: str, is_write: bool) -> mcp_types.ToolAnnotations:
     return mcp_types.ToolAnnotations(
         read_only_hint=False,
         destructive_hint=name in _DESTRUCTIVE_TOOL_NAMES,
-        idempotent_hint=False,
+        idempotent_hint=name in _IDEMPOTENT_TOOL_NAMES,
         open_world_hint=True,
     )
 
 
 class AnalyticsMCPServer(MCPServer):
-    """MCPServer that explains how to enable write tools when one is called."""
+    """MCPServer that explains why a known but unregistered tool is missing."""
 
-    def __init__(self, allow_write: bool):
-        super().__init__(name="Google Analytics MCP Server")
+    def __init__(self, allow_write: bool, tool_groups: frozenset[str]):
+        super().__init__(
+            name=SERVER_NAME,
+            version=SERVER_VERSION,
+            instructions=SERVER_INSTRUCTIONS,
+        )
         self._allow_write = allow_write
+        self._tool_groups = tool_groups
 
     async def call_tool(
         self, name: str, arguments: dict[str, Any], context=None
@@ -233,24 +366,50 @@ class AnalyticsMCPServer(MCPServer):
                 " Start the server with the --allow-write flag to enable write"
                 " tools."
             )
+        group = _TOOL_GROUP_OF.get(name)
+        if group is not None and group not in self._tool_groups:
+            raise ToolError(
+                f"Tool '{name}' is in the '{group}' tool group, which this"
+                " server wasn't started with. Add it to --tools or"
+                " GOOGLE_ANALYTICS_MCP_TOOL_GROUPS to enable it."
+            )
         return await super().call_tool(name, arguments, context)
 
 
-def create_server(allow_write: bool = False) -> Server:
-    """Creates the MCP server and returns its low-level Server."""
+def create_server(
+    allow_write: bool = False,
+    tool_groups: str | Iterable[str] | None = None,
+) -> AnalyticsMCPServer:
+    """Creates the MCP server.
+
+    Args:
+        allow_write: Registers the write tools too.
+        tool_groups: Tool groups to register (see TOOL_GROUPS), as an iterable
+          or a comma-separated string. None or empty registers every group.
+          get_account_summaries is always registered.
+
+    Raises:
+        ValueError: If tool_groups names an unknown group.
+    """
+    groups = parse_tool_groups(tool_groups)
     set_allow_write(allow_write)
-    mcp = AnalyticsMCPServer(allow_write)
-    tools = [(fn, desc, False) for fn, desc in _READ_ONLY_TOOLS]
+    mcp = AnalyticsMCPServer(allow_write, groups)
+    tools = [(*t, False) for t in _READ_ONLY_TOOLS]
     if allow_write:
-        tools += [(fn, desc, True) for fn, desc in _WRITE_TOOLS]
-    for fn, description, is_write in tools:
+        tools += [(*t, True) for t in _WRITE_TOOLS]
+    for fn, title, group, description, is_write in tools:
+        if group is not None and group not in groups:
+            continue
         mcp.add_tool(
             _report_errors(fn, is_write),
             name=fn.__name__,
+            title=title,
             description=description or inspect.cleandoc(fn.__doc__ or ""),
             annotations=_annotations(fn.__name__, is_write),
+            # The return annotations (Dict[str, Any], List[...]) would only
+            # publish a generic object schema, wrapped in {"result": ...}.
             structured_output=False,
         )
     for tool in mcp._tool_manager.list_tools():
         sanitize_mcp_schema_properties(tool.parameters)
-    return mcp._lowlevel_server
+    return mcp

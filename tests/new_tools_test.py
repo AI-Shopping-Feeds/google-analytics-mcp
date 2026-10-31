@@ -19,7 +19,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from analytics_mcp import coordinator
-from mcp import types as mcp_types
+from mcp import Client
 from analytics_mcp.tools import generic, measurement_protocol as mp
 from analytics_mcp.tools.admin import config, manage
 from analytics_mcp.tools.reporting import extra
@@ -352,10 +352,7 @@ class TestToolRegistration(unittest.IsolatedAsyncioTestCase):
 
     async def _tools(self, allow_write):
         server = coordinator.create_server(allow_write=allow_write)
-        result = await server.get_request_handler("tools/list").handler(
-            None, None
-        )
-        return {t.name: t for t in result.tools}
+        return {t.name: t for t in await server.list_tools()}
 
     async def test_tool_counts_and_annotations(self):
         read = await self._tools(False)
@@ -375,11 +372,10 @@ class TestToolRegistration(unittest.IsolatedAsyncioTestCase):
 
     async def test_expected_errors_reach_the_client(self):
         server = coordinator.create_server(allow_write=False)
-        call = server.get_request_handler("tools/call").handler
-        params = mcp_types.CallToolRequestParams(
-            name="get_property_details", arguments={"property_id": "nope"}
-        )
-        result = await call(None, params)
+        async with Client(server) as client:
+            result = await client.call_tool(
+                "get_property_details", {"property_id": "nope"}
+            )
         self.assertTrue(result.is_error)
         self.assertIn("Invalid property ID", result.content[0].text)
 
@@ -395,11 +391,8 @@ class TestToolRegistration(unittest.IsolatedAsyncioTestCase):
             )
         )
         server = coordinator.create_server(allow_write=False)
-        call = server.get_request_handler("tools/call").handler
-        params = mcp_types.CallToolRequestParams(
-            name="get_account_summaries", arguments={}
-        )
-        result = await call(None, params)
+        async with Client(server) as client:
+            result = await client.call_tool("get_account_summaries", {})
         self.assertTrue(result.is_error)
         self.assertIn(
             "default credentials were not found", result.content[0].text

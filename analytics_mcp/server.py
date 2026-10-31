@@ -17,21 +17,23 @@
 """Entry point for the Google Analytics MCP server."""
 
 import argparse
-import asyncio
+import os
 import sys
 from typing import Sequence
+
 import analytics_mcp.coordinator as coordinator
-from mcp.server.lowlevel import NotificationOptions
-from mcp.server.models import InitializationOptions
-import mcp.server.stdio
-import mcp.server
-import traceback
+
+TOOL_GROUPS_ENV_VAR = "GOOGLE_ANALYTICS_MCP_TOOL_GROUPS"
 
 
-def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parses command-line arguments for the MCP server."""
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Google Analytics MCP Server",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {coordinator.SERVER_VERSION}",
     )
     parser.add_argument(
         "--allow-write",
@@ -41,33 +43,53 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "(requires https://www.googleapis.com/auth/analytics.edit scope)."
         ),
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--tools",
+        metavar="GROUPS",
+        default=None,
+        help=(
+            "Comma-separated tool groups to register: "
+            f"{', '.join(coordinator.TOOL_GROUPS)}. Defaults to all groups, "
+            f"or to ${TOOL_GROUPS_ENV_VAR} when set. get_account_summaries "
+            "is always registered."
+        ),
+    )
+    return parser
 
 
-async def run_server_async(allow_write: bool = False):
-    """Runs the MCP server over standard I/O."""
-    app = coordinator.create_server(allow_write=allow_write)
-    print("Starting MCP Stdio Server:", app.name, file=sys.stderr)
-    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-        await app.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name=app.name,  # Use the server name defined above
-                server_version="1.0.0",
-                capabilities=app.get_capabilities(
-                    # Define server capabilities - consult MCP docs for options
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
-                ),
-            ),
-        )
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parses command-line arguments for the MCP server.
+
+    Resolves `tool_groups` from --tools, falling back to the
+    GOOGLE_ANALYTICS_MCP_TOOL_GROUPS environment variable. Exits with a usage
+    error if a group is unknown.
+    """
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    if args.tools is not None:
+        source, value = "--tools", args.tools
+    else:
+        source, value = TOOL_GROUPS_ENV_VAR, os.environ.get(TOOL_GROUPS_ENV_VAR)
+    try:
+        args.tool_groups = coordinator.parse_tool_groups(value)
+    except ValueError as exc:
+        parser.error(f"{source}: {exc}")
+    return args
 
 
 def run_server(argv: Sequence[str] | None = None):
-    """Synchronous wrapper to run the async MCP server."""
+    """Runs the MCP server over standard I/O."""
     args = parse_args(argv)
-    asyncio.run(run_server_async(allow_write=args.allow_write))
+    app = coordinator.create_server(
+        allow_write=args.allow_write, tool_groups=args.tool_groups
+    )
+    print(
+        f"Starting MCP Stdio Server: {app.name} {app.version}"
+        f" (tool groups: {', '.join(sorted(args.tool_groups))};"
+        f" write tools {'on' if args.allow_write else 'off'})",
+        file=sys.stderr,
+    )
+    app.run("stdio")
 
 
 if __name__ == "__main__":
