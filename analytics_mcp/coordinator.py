@@ -37,7 +37,36 @@ from analytics_mcp.tools.admin.info import (
     list_property_annotations,
     create_property_annotation,
 )
+from analytics_mcp.tools.admin.config import (
+    get_property_settings,
+    list_audiences,
+    list_data_streams,
+    list_key_events,
+    run_access_report,
+    search_change_history,
+)
+from analytics_mcp.tools.admin.manage import (
+    archive_custom_definition,
+    create_custom_dimension,
+    create_custom_metric,
+    create_google_ads_link,
+    create_key_event,
+    create_measurement_protocol_secret,
+    delete_key_event,
+    update_data_retention,
+)
 from analytics_mcp.tools.client import set_allow_write
+from analytics_mcp.tools.generic import call_api, list_api_methods
+from analytics_mcp.tools.measurement_protocol import (
+    send_measurement_protocol_events,
+    validate_measurement_protocol_events,
+)
+from analytics_mcp.tools.reporting.extra import (
+    check_compatibility,
+    get_dimensions_and_metrics,
+    get_property_quotas_snapshot,
+    run_pivot_report,
+)
 from analytics_mcp.tools.reporting.core import (
     run_report,
     _run_report_description,
@@ -84,12 +113,42 @@ read_only_tools = [
     run_realtime_report_with_description,
     run_funnel_report_with_description,
     run_conversions_report_with_description,
+    FunctionTool(run_pivot_report),
+    FunctionTool(check_compatibility),
+    FunctionTool(get_dimensions_and_metrics),
+    FunctionTool(get_property_quotas_snapshot),
+    FunctionTool(list_data_streams),
+    FunctionTool(list_key_events),
+    FunctionTool(list_audiences),
+    FunctionTool(search_change_history),
+    FunctionTool(get_property_settings),
+    FunctionTool(run_access_report),
+    FunctionTool(list_api_methods),
+    FunctionTool(validate_measurement_protocol_events),
 ]
 
 # Instantiate the write ADK tools (only enabled when --allow-write is set)
 write_tools = [
     FunctionTool(create_property_annotation),
+    FunctionTool(create_custom_dimension),
+    FunctionTool(create_custom_metric),
+    FunctionTool(archive_custom_definition),
+    FunctionTool(create_key_event),
+    FunctionTool(delete_key_event),
+    FunctionTool(update_data_retention),
+    FunctionTool(create_google_ads_link),
+    FunctionTool(create_measurement_protocol_secret),
+    FunctionTool(send_measurement_protocol_events),
+    FunctionTool(call_api),
 ]
+
+# Write tools whose effects can't be undone, marked destructive for MCP hosts.
+_DESTRUCTIVE_TOOL_NAMES = {
+    "archive_custom_definition",
+    "delete_key_event",
+    "send_measurement_protocol_events",
+    "call_api",
+}
 
 _READ_ONLY_TOOL_NAMES = {t.name for t in read_only_tools}
 _WRITE_TOOL_NAMES = {t.name for t in write_tools}
@@ -162,7 +221,7 @@ def _prepare_mcp_tools(
         else:
             mcp_tool.annotations = mcp_types.ToolAnnotations(
                 read_only_hint=False,
-                destructive_hint=False,
+                destructive_hint=mcp_tool.name in _DESTRUCTIVE_TOOL_NAMES,
                 idempotent_hint=False,
                 open_world_hint=True,
             )
