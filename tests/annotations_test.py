@@ -298,12 +298,13 @@ class TestAllowWriteConfiguration(unittest.IsolatedAsyncioTestCase):
             dumped = mcp_tool.annotations.model_dump(
                 by_alias=True, exclude_none=True
             )
-            if mcp_tool.name == "create_property_annotation":
+            if mcp_tool.name in coordinator._WRITE_TOOL_NAMES:
                 self.assertEqual(
                     dumped,
                     {
                         "readOnlyHint": False,
-                        "destructiveHint": False,
+                        "destructiveHint": mcp_tool.name
+                        in coordinator._DESTRUCTIVE_TOOL_NAMES,
                         "idempotentHint": False,
                         "openWorldHint": True,
                     },
